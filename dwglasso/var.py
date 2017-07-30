@@ -79,17 +79,20 @@ class VAR(object):
         dictate the value of the current output, otherwise we reset the
         whole system state.  If reset_t is True then we set the current
         time to reset_t'''
+        n, p = self.n, self.p
         if x_0:
-            if len(x_0) == self.n:  # Initialize just the output
-                self._z = np.zeros(self.n * self.p)
-                self._z[:self.n] = x_0
-            elif len(x_0) == self.n * self.p:  # Initialize whole state
+            if len(x_0) == n:  # Initialize just the output
+                self._z = np.zeros(n * p)
+                self._z[:n] = x_0
+            elif len(x_0) == n * p:  # Initialize whole state
                 self._z = x_0
             else:
                 raise ValueError('Dimension %d of x_0 is not compatible with '
-                                 'system dimensions n = %d, p = %d' % (self.n,
-                                                                       self.p))
-        self.x = self._z[:self.n]  # System output
+                                 'system dimensions n = %d, p = %d' % (n, p))
+
+        else:
+            self._z = np.zeros(n * p)
+        self.x = self._z[:n]  # System output
         if reset_t:
             self.t = 0
         return
