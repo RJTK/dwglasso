@@ -22,6 +22,7 @@ def random_var(graph_func, coefficient_func, margin=1e-6, max_tries=15):
     '''
     k = 0  # Number of attempts
     while k < max_tries:
+        k += 1
         G = graph_func()
         B = coefficient_func(G)
         if is_stable(B):
