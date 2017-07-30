@@ -80,7 +80,7 @@ class VAR(object):
         whole system state.  If reset_t is True then we set the current
         time to reset_t'''
         n, p = self.n, self.p
-        if x_0:
+        if x_0 is not None:
             if len(x_0) == n:  # Initialize just the output
                 self._z = np.zeros(n * p)
                 self._z[:n] = x_0
@@ -88,7 +88,8 @@ class VAR(object):
                 self._z = x_0
             else:
                 raise ValueError('Dimension %d of x_0 is not compatible with '
-                                 'system dimensions n = %d, p = %d' % (n, p))
+                                 'system dimensions n = %d, p = %d' %
+                                 (len(x_0), n, p))
 
         else:
             self._z = np.zeros(n * p)

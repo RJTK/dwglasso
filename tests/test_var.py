@@ -7,12 +7,65 @@
 import unittest
 
 import numpy as np
-# from matplotlib import pyplot as plt
-# import seaborn
+from matplotlib import pyplot as plt
+import seaborn
 
 from .context import dwglasso
 from dwglasso import var
 from .random_var_generators import random_var, iid_gaussian_var, iid_ber_graph
+
+
+class TestVAR_plots(unittest.TestCase):
+    '''Creates some plots from a VAR system'''
+    @classmethod
+    def setUpClass(cls):
+        cls.B0 = np.array([[0.8, 0.1],
+                           [0., 0.8]])
+        cls.B1 = np.array([[0.1, 0.0],
+                           [0., 0.1]])
+        cls.B = [cls.B0, cls.B1]
+        np.random.seed(2718)
+        return
+
+    def test_000_plot(self):
+        '''Drive a stable system with 0 mean noise'''
+        T = 100
+        U = np.random.multivariate_normal(np.zeros(2),
+                                          0.1 * np.eye(2),
+                                          T)
+        t = range(T)
+        system = var.VAR(self.B)
+        Y = system.drive(U)
+        for i in range(2):
+            plt.plot(t, U[:, i], linestyle='--', alpha=0.5,
+                     label='$u_%d(t)$' % i)
+            plt.plot(t, Y[:, i], linewidth=2, label='$x_%d(t)$' % i)
+        plt.legend()
+        plt.xlabel('$t$')
+        plt.ylabel('Output')
+        plt.title('Driven Stable VAR(2) System')
+        plt.show()
+        return
+
+    def test_001_plot(self):
+        '''Drive an unstable system with 0 mean noise'''
+        T = 10
+        U = np.random.multivariate_normal(np.zeros(2),
+                                          0.1 * np.eye(2),
+                                          T)
+        t = range(T)
+        system = var.VAR([2 * B_tau for B_tau in self.B])
+        Y = system.drive(U)
+        for i in range(2):
+            plt.plot(t, U[:, i], linestyle='--', alpha=0.5,
+                     label='$u_%d(t)$' % i)
+            plt.plot(t, Y[:, i], linewidth=2, label='$x_%d(t)$' % i)
+        plt.legend()
+        plt.xlabel('$t$')
+        plt.ylabel('Output')
+        plt.title('Driven Unstable VAR(2) System')
+        plt.show()
+        return
 
 
 class TestVAR(unittest.TestCase):
@@ -29,6 +82,7 @@ class TestVAR(unittest.TestCase):
         cls.G = np.array([[1.0, 1.0],
                           [0.0, 1.0]])
 
+        np.random.seed(2718)
         cls.n = 50
         cls.p = 4
         cls.q = 0.4
@@ -120,6 +174,21 @@ class TestVAR(unittest.TestCase):
                                         y, atol=1e-12))
 
         return
+
+    def test_007_state_init(self):
+        system = var.VAR(self.B, x_0=np.array([1.8, 1.9, 1., 1.]))
+        y = system.drive(np.array([1., 1.]))
+        self.assertTrue(np.allclose(y, np.array([2.54, 2.8])))
+        return
+
+    def test_008_exceptions(self):
+        with self.assertRaises(ValueError):
+            var.VAR([np.eye(2), np.eye(3)])
+        with self.assertRaises(ValueError):
+            var.VAR(self.B, x_0=np.array([1, 2, 3]))
+        with self.assertRaises(ValueError):
+            system = var.VAR(self.B)
+            system.drive(np.array([1, 2, 3]))
 
     # def test_command_line_interface(self):
     #     """Test the CLI."""
