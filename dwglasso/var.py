@@ -22,19 +22,62 @@ class VAR(object):
                              'equivalent sizes')
         self.B = B  # Keep the list of matrices
         self._B = np.vstack(B)  # Standard form layout \hat{x(t)} = B^\T z(t)
-        self.t = 0  # Current time
+        self.t = 0
 
-        # _s is the internal state of the system
-        self._s = np.zeros(self.n * self.p)
+        # _z is the internal state of the system
+        self._z = np.zeros(self.n * self.p)
+        self.reset(x_0=x_0)  # Reset system state
+        return
+
+    def reset(self, x_0=None, reset_t=False):
+        '''Reset the system to some initial state.  If x_0 is specified,
+        it may be of dimension n or n * p.  If it is dimension n, we simply
+        dictate the value of the current output, otherwise we reset the
+        whole system state.  If reset_t is True then we set the current
+        time to reset_t'''
         if x_0:
             if len(x_0) == self.n:  # Initialize just the output
-                self._s = np.zeros(self.n * self.p)
-                self._s[:self.n] = x_0
+                self._z = np.zeros(self.n * self.p)
+                self._z[:self.n] = x_0
             elif len(x_0) == self.n * self.p:  # Initialize whole state
-                self._s = x_0
+                self._z = x_0
             else:
                 raise ValueError('Dimension %d of x_0 is not compatible with '
                                  'system dimensions n = %d, p = %d' % (self.n,
                                                                        self.p))
-        self.x = self._s[:self.n]  # System output
+        self.x = self._z[:self.n]  # System output
+        if reset_t:
+            self.t = 0
         return
+
+    def drive(self, u):
+        '''
+        Drives the system with input u.  u should be a T x n array of
+        containing a sequence of T inputs, or a single length n input.
+        '''
+        n, p = self.n, self.p
+        if len(u.shape) == 1:  # A single input
+            try:
+                u = u.reshape((1, n))  # Turn it into a vector
+            except ValueError:
+                raise ValueError('The length %d of u is not compatible with '
+                                 'system dimensions n = %d, p = %d'
+                                 % (len(u), n, p))
+
+        if u.shape[1] != n:  # Check dimensions are compatible
+            raise ValueError('The dimension %d of the input vectors is '
+                             'not compatible with system dimensions n = %d, '
+                             ' p = %d' % (u.shape[1], n, p))
+
+        T = u.shape[0]  # The number of time steps
+        self.t += T
+
+        # Output matrix to be returned
+        Y = np.empty((T, n))
+        for t in range(T):
+            y = np.dot(self._z, self._B) + u[t, :]  # Next output
+            Y[t, :] = y
+            self._z = np.roll(self._z, n)  # Update system state
+            self._z[:n] = y
+        self.x = self._z[:n]  # System output
+        return Y
