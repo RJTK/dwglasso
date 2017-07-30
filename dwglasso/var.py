@@ -29,6 +29,24 @@ class VAR(object):
         self.reset(x_0=x_0)  # Reset system state
         return
 
+    def induced_graph(self):
+        '''Returns the adjacency matrix of the Granger-causality graph
+        induced by this VAR model.  This graph is defined via:
+
+        G_{ij} = 1 if \exists tau s.t. B(tau)_{ji} \ne 0, and G_{ij} = 0
+        otherwise.
+
+        The interpretation of B(tau)_{ji} is as the coefficient transferring
+        energy from process i to process j with a lag of tau seconds.  And,
+        G_{ij} = 1 if there is some transfer from process i to j.  Hence,
+        we are looking at transposes of coefficient matrices to get to
+        the graph adjacency matrix.
+        '''
+        # We are careful to return np arrays with float type as
+        # True/False do not always behave in the same way as 1./0.
+        return np.array(sum(B_tau != 0 for B_tau in self.B) != 0,
+                        dtype=np.float64)
+
     def is_stable(self, margin=1e-6):
         '''Checks whether or not the system is stable.  In order to do
         this we directly calculate the eigenvalues of the block companion
