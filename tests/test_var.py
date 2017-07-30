@@ -12,26 +12,49 @@ import numpy as np
 
 from .context import dwglasso
 from dwglasso import var
+from .random_var_generators import random_var, iid_gaussian_var, iid_ber_graph
 
 
-class TestVar_basic(unittest.TestCase):
-    """Tests for `dwglasso` package."""
+class TestVAR(unittest.TestCase):
+    """Basic tests for VAR model"""
+    # setUpClass / tearDownClass are executed only once for TestVAR
+    @classmethod
+    def setUpClass(cls):
+        # Data common to many tests
+        cls.B0 = np.array([[0.8, 0.1],
+                           [0., 0.8]])
+        cls.B1 = np.array([[0.1, 0.0],
+                           [0., 0.1]])
+        cls.B = [cls.B0, cls.B1]
+        cls.G = np.array([[1.0, 1.0],
+                          [0.0, 1.0]])
 
+        cls.n = 50
+        cls.p = 4
+        cls.q = 0.4
+        cls.B_random = random_var(lambda: iid_ber_graph(cls.n, cls.q),
+                                  lambda G: iid_gaussian_var(cls.p, cls.G,
+                                                             0.65 / cls.q),
+                                  max_tries=1)
+        return
+
+    # setUp / tearDown are executed before and after every test
     def setUp(self):
         """Set up test fixtures, if any."""
-        self.B0 = np.array([[0.8, 0.1],
-                            [0., 0.8]])
-        self.B1 = np.array([[0.1, 0.0],
-                            [0., 0.1]])
-        self.B = [self.B0, self.B1]
-        self.G = np.array([[1.0, 1.0],
-                           [0.0, 1.0]])
         return
 
     def tearDown(self):
         """Tear down test fixtures, if any."""
+        return
 
-    def test_000_is_stable(self):
+    def test_000_basic_init(self):
+        system = var.VAR(self.B)
+        self.assertEqual(system.n, 2)
+        self.assertEqual(system.p, 2)
+        self.assertEqual(system.t, 0)
+        return
+
+    def test_001_is_stable(self):
         stable_system = var.VAR(self.B)
         self.assertTrue(stable_system.is_stable())
 
@@ -39,19 +62,20 @@ class TestVar_basic(unittest.TestCase):
         self.assertFalse(unstable_system.is_stable())
         return
 
-    def test_001_induced_graph(self):
+    def test_002_induced_graph(self):
         system = var.VAR(self.B)
         self.assertTrue(np.all(system.induced_graph() == self.G))
         return
 
-    def test_002_drive1(self):
+    def test_003_drive1(self):
         system = var.VAR(self.B)
         u = np.array([1., 1.])
         y = system.drive(u)
         self.assertTrue(np.all(y == u))
+        self.assertEqual(system.t, 1)
         return
 
-    def test_003_drive2(self):
+    def test_004_drive2(self):
         system = var.VAR(self.B)
         U = np.ones((3, 2))
         Y_expected = np.array([[1.,    1.],
@@ -61,9 +85,10 @@ class TestVar_basic(unittest.TestCase):
 
         self.assertTrue(np.allclose(Y, Y_expected, atol=1e-12),
                         msg='Y = %s,\n Y_expeted = %s' % (Y, Y_expected))
+        self.assertEqual(system.t, 3)
         return
 
-    def test_004_drive3(self):
+    def test_005_drive3(self):
         system = var.VAR(self.B)
         u = np.array([1., 1.])
         U = np.ones((3, 2))
@@ -75,6 +100,25 @@ class TestVar_basic(unittest.TestCase):
                                         y, atol=1e-12),
                             msg='y = %s,\n y_expected = %s' %
                             (y, Y_expected[t, :]))
+        return
+
+    def test_006_drive4(self):
+        # Same as test_005_drive3, but with a more complicated system
+        T = 25
+        system = var.VAR(self.B_random)
+        n = system.n
+
+        # Random input noise
+        U = np.random.multivariate_normal(np.zeros(n),
+                                          np.eye(n),
+                                          T)
+        Y_expected = system.drive(U)
+        system.reset()
+        for t in range(T):
+            y = system.drive(U[t, :])
+            self.assertTrue(np.allclose(Y_expected[t, :],
+                                        y, atol=1e-12))
+
         return
 
     # def test_command_line_interface(self):
