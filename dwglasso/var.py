@@ -29,6 +29,32 @@ class VAR(object):
         self.reset(x_0=x_0)  # Reset system state
         return
 
+    def is_stable(self, margin=1e-6):
+        '''Checks whether or not the system is stable.  In order to do
+        this we directly calculate the eigenvalues of the block companion
+        matrix induced by B, which is of size (np x np).  This may be
+        prohibitive for very large systems.
+
+        Stability is determined by the spectral radius of the matrix:
+
+        C =
+        [B0, B1, B2, ... Bp-1]
+        [ I,  0,  0, ... 0   ]
+        [ 0,  I,  0, ... 0   ]
+        [ 0,  0,  I, ... 0   ]
+        [ 0,  0, ..., I, 0   ]
+
+        we return True if |\lambda_max(C)| <= 1 - margin.  Note that the
+        default margin is very small.
+        '''
+        n, p = self.n, self.p
+        C = np.hstack((np.eye(n * (p - 1)),  # The block diagonal I
+                       np.zeros((n * (p - 1), n))))  # right col
+        C = np.vstack((np.hstack((B_tau for B_tau in self.B)),  # top row
+                       C))
+        ev = np.linalg.eigvals(C)  # Compute the eigenvalues
+        return max(abs(ev)) <= 1 - margin
+
     def reset(self, x_0=None, reset_t=False):
         '''Reset the system to some initial state.  If x_0 is specified,
         it may be of dimension n or n * p.  If it is dimension n, we simply
