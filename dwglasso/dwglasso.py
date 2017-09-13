@@ -21,7 +21,7 @@ class FitMethod(enum.Enum):
 
 class DWGLASSO(BaseEstimator, RegressorMixin):
     def __init__(self, p, alpha=0.1, mu=0.1, lmbda=1,
-                 tol=1e-9, max_iters=100):
+                 tol_abs=0, tol_rel=1e-4, max_iters=100):
         '''
         ADMM implementation (consensus form) used to solve
         the DWGLASSO convex program.
@@ -38,8 +38,6 @@ class DWGLASSO(BaseEstimator, RegressorMixin):
 
         mu is a parameter for the proximal operator:
         prox_psi(v) = argmin_x (psi(x) + (1 / 2mu) * ||x - v||_2^2)
-
-        stopping criteria:  (1 / n^2p) * ||B_z - B_x||_F^2 < tol
 
         if lmbda == 0 we are doing Ordinary Least Squares (OLS)
         if lmbda > 0 and alpha == 1 it is tikhonov regularized (OLST)
@@ -63,9 +61,10 @@ class DWGLASSO(BaseEstimator, RegressorMixin):
                              'or alpha = 1 when lmbda > 0 (OLST)')
         self.mu = mu  # prox parameter (1/2mu)
 
-        if tol <= 0:
-            raise ValueError('We require tol > 0')
-        self.tol = tol
+        if tol_abs or tol_rel <= 0:
+            raise ValueError('We require tolerances to be > 0')
+        self.tol_abs = tol_abs
+        self.tol_rel = tol_rel
 
         if max_iters <= 0:
             raise ValueError('We require max_iters > 0')
@@ -124,10 +123,6 @@ class DWGLASSO(BaseEstimator, RegressorMixin):
             return P
         return proxg
 
-    def _rel_err(self, B1, B2):
-        return (1. / (self.p * self._n ** 2)) * np.linalg.norm(B1 - B2,
-                                                               'f') ** 2
-
     def _fit_ols(self, silent=True):
         '''Ordinary Least Squares'''
         self._lu_piv = lu_factor(self.ZTZ)
@@ -144,8 +139,30 @@ class DWGLASSO(BaseEstimator, RegressorMixin):
         # use the sklearn or SPAMS implementation, which is probably faster
         return self._fit_dwglasso(silent)
 
+    def _check_convergence(self, Bu, Bx, Bz, Bz_prev, silent=True):
+        '''Checks the residual values against the tolerances and
+        returns true if we meet the convergence criteria'''
+        # Residual values
+        prim_res = np.linalg.norm(Bx - Bz)
+        dual_res = np.linalg.norm(Bz_prev - Bz)
+
+        if not silent:
+            print('(prim_res, dual_res) = (%0.3f, %0.3f)'
+                  % (prim_res, dual_res), end='\r')
+
+        self._prim_err_progress.append(prim_res)
+        self._dual_err_progress.append(dual_res)
+
+        prim_tol = self.tol_abs + self.tol_rel * max(np.linalg.norm(Bx),
+                                                     np.linalg.norm(Bx))
+        dual_tol = self.tol_abs + self.tol_rel * np.linalg.norm(Bu)
+
+        return prim_res <= prim_tol and dual_res <= dual_tol
+
     def _fit_dwglasso(self, silent=True):
-        # TODO: Check the dual convergence
+        # Initialize error tracking for convergence diagnostics
+        self._prim_err_progress = []
+        self._dual_err_progress = []
 
         # Intermediate variables
         r = (1 + self.mu * self.lmbda * self.alpha) / self.mu
@@ -158,33 +175,27 @@ class DWGLASSO(BaseEstimator, RegressorMixin):
         proxg = self._proxg()
 
         # ADMM iterations
+        Bz_prev = np.zeros((self._n * self.p, self._n))
         Bz = np.zeros((self._n * self.p, self._n))
         Bx = self._proxf(Bz)
         Bu = Bx - Bz
         k = 0
-        rel_err_k = self._rel_err(Bx, Bz)
-        self._err_progress.append(rel_err_k)
-        while rel_err_k > self.tol and k < self.max_iter:
-            if not silent:
-                print('iter:', k, '(1/pn^2)||Bx - Bz||_F^2 =',
-                      rel_err_k, end='\r')
-            sys.stdout.flush()
 
+        while not self._check_convergence(
+                Bu, Bx, Bz, Bz_prev, silent) and k < self.max_iter:
             k += 1
             Bx = self._proxf(Bz - Bu)
             Bz = proxg(Bx + Bu)
             Bu = Bu + Bx - Bz
             rel_err_k = self._rel_err(Bx, Bz)
-            self._err_progress.append(rel_err_k)
 
             if not silent:
                 if k == self.max_iter:
                     warnings.warn('Max iterations exceeded!  rel_err = %e'
                                   % rel_err_k, RuntimeWarning)
-        self._total_iters = k
         if not silent:
-            print()  # Newline
-
+            print()
+        self._total_iters = k
         return Bz
 
     def get_B_list(self):
